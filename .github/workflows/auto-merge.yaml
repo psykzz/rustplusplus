@@ -75,7 +75,6 @@ jobs:
           const { owner, repo } = context.repo;
           const baseBranch = '${{ steps.reset_staging.outputs.base_branch }}';
           const stagingBranch = '${{ steps.reset_staging.outputs.staging_branch }}';
-          const exec = require('@actions/exec');
 
           console.log(`Searching for open PRs with 'auto-merge' label targeting '${baseBranch}'...`);
 
