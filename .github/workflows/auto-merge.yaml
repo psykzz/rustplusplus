@@ -75,6 +75,7 @@ jobs:
           const { owner, repo } = context.repo;
           const baseBranch = '${{ steps.reset_staging.outputs.base_branch }}';
           const stagingBranch = '${{ steps.reset_staging.outputs.staging_branch }}';
+          const exec = require('@actions/exec');
 
           console.log(`Searching for open PRs with 'auto-merge' label targeting '${baseBranch}'...`);
 
@@ -97,7 +98,7 @@ jobs:
 
           console.log(`Found ${prsToMerge.length} PR(s) to merge into ${stagingBranch}:`);
           for (const pr of prsToMerge) {
-            console.log(`  - #${pr.number}: ${pr.title} (from ${pr.head.ref})`);
+            console.log(`  - #${pr.number}: ${pr.title} (from ${pr.head.ref})`);
           }
 
           let mergedPrs = [];
@@ -106,6 +107,21 @@ jobs:
 
           for (const pr of prsToMerge) {
             try {
+                // Check if the PR's head commit is already in the staging branch
+                let isAlreadyMerged = false;
+                try {
+                    await exec.exec(`git merge-base --is-ancestor ${pr.head.sha} ${stagingBranch}`);
+                    isAlreadyMerged = true;
+                } catch (error) {
+                    // This command throws an error if it's not an ancestor
+                    isAlreadyMerged = false;
+                }
+
+                if (isAlreadyMerged) {
+                    console.log(`PR #${pr.number} is already consolidated. Skipping merge.`);
+                    continue;
+                }
+
               console.log(`Attempting to merge PR #${pr.number} (${pr.head.ref}) into ${stagingBranch}...`);
 
               // Fetch the PR's head ref
