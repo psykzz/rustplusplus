@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - '**' # Trigger on push to ANY branch
-      - '!${{ vars.STAGING_BRANCH }}' # EXCLUDE the staging branch itself to prevent infinite loops
+      - '!staging' # EXCLUDE the staging branch itself to prevent infinite loops
   pull_request:
     types:
       - labeled    # Trigger when a label is added (for new PRs)
