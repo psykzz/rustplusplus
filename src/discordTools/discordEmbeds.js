@@ -602,11 +602,7 @@ module.exports = {
             footer: { text: body.name },
             title: data.title,
             description: data.message,
-<<<<<<< HEAD
-            thumbnail: body.img !== '' ? body.img : 'attachment://rocket.png'
-=======
             thumbnail: (body.img !== '' && isValidUrl(body.img)) ? body.img : 'attachment://rocket.png'
->>>>>>> master
         });
     },
 
