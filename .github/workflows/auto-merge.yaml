@@ -114,6 +114,7 @@ jobs:
                     isAlreadyMerged = true;
                 } catch (error) {
                     // This command throws an error if it's not an ancestor
+                    console.log("merging because we error'd", error);
                     isAlreadyMerged = false;
                 }
 
