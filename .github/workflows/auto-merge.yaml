@@ -4,10 +4,10 @@ on:
   push:
     branches:
       - '**' # Trigger on push to ANY branch
-      - '!staging' # EXCLUDE the staging branch itself to prevent infinite loops
+      - '!${{ vars.STAGING_BRANCH }}' # EXCLUDE the staging branch itself to prevent infinite loops
   pull_request:
     types:
-      - labeled   # Trigger when a label is added (for new PRs)
+      - labeled    # Trigger when a label is added (for new PRs)
       - unlabeled # Trigger when a label is removed (to remove from staging)
       - opened    # Trigger when a PR is opened (in case it already has the label)
       - synchronize # Trigger when new commits are pushed to an open PR (to update staging)
@@ -16,7 +16,7 @@ on:
 # Ensure only one instance of this workflow runs at a time for this group.
 # This is crucial to prevent race conditions when force-pushing to 'staging'.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/staging' && 'staging-update' || 'other-branches' }}
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/${{ vars.STAGING_BRANCH }}' && 'staging-update' || 'other-branches' }}
   cancel-in-progress: true
 
 jobs:
@@ -33,18 +33,19 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-    - name: Checkout Base Branch (main)
+    - name: Checkout Base Branch
       uses: actions/checkout@v4
       with:
-        ref: master # <--- Your base/stable branch (e.g., master, main)
+        ref: ${{ vars.BASE_BRANCH }} # <--- Your base/stable branch
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0 # Fetch all history for cleaner merges if needed
 
     - name: Create/Reset Staging Branch from Base
       id: reset_staging
       run: |
-        BASE_BRANCH="master"    # <--- Your base/stable branch
-        STAGING_BRANCH="staging" # <--- Your target staging branch
+        # Use environment variables set in the repository/organization settings
+        BASE_BRANCH="${{ vars.BASE_BRANCH }}"
+        STAGING_BRANCH="${{ vars.STAGING_BRANCH }}"
 
         echo "Creating or resetting ${STAGING_BRANCH} branch from ${BASE_BRANCH}..."
         git checkout -B "$STAGING_BRANCH" "$BASE_BRANCH"
@@ -156,4 +157,3 @@ jobs:
           if (mergeConflictDetected) {
             core.setFailed("One or more PRs failed to merge due to conflicts. Check logs for details and the PR comments.");
           }
-
