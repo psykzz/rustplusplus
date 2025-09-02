@@ -1,6 +1,7 @@
 name: Continuous Staging Consolidation
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - '**' # Trigger on push to ANY branch
