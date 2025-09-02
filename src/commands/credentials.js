@@ -134,7 +134,7 @@ async function addCredentials(client, interaction, verifyId) {
             delete client.fcmListeners[guildId];
             credentials.hoster = null;
         } else {
-            if (client.fcmListenersLite[guildId][steamId]) {
+            if (client.fcmListenersLite[guildId] && client.fcmListenersLite[guildId][steamId]) {
                 client.fcmListenersLite[guildId][steamId].destroy();
             }
             delete client.fcmListenersLite[guildId][steamId];
