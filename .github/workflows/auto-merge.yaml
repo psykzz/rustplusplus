@@ -1,0 +1,122 @@
+name: Continuous Staging Consolidation
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore:
+      - staging
+  pull_request:
+    types:
+      - labeled
+      - unlabeled
+      - opened
+      - reopened
+      - synchronize
+
+concurrency:
+  group: staging-consolidation
+  cancel-in-progress: false
+
+jobs:
+  consolidate-staging:
+    # Pull-request tokens from forks cannot update the staging branch.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: read
+    env:
+      BASE_BRANCH: ${{ vars.BASE_BRANCH || 'master' }}
+      STAGING_BRANCH: ${{ vars.STAGING_BRANCH || 'staging' }}
+
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.BASE_BRANCH || 'master' }}
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Rebuild staging branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const baseBranch = process.env.BASE_BRANCH;
+            const stagingBranch = process.env.STAGING_BRANCH;
+
+            if (baseBranch === stagingBranch) {
+              core.setFailed("BASE_BRANCH and STAGING_BRANCH must be different.");
+              return;
+            }
+
+            await exec.exec("git", ["checkout", "-B", stagingBranch, `origin/${baseBranch}`]);
+
+            const pullRequests = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "open",
+              base: baseBranch,
+              per_page: 100,
+            });
+            const stagedPullRequests = pullRequests
+              .filter((pullRequest) => pullRequest.labels.some((label) => label.name === "auto-merge"))
+              .sort((left, right) => left.number - right.number);
+
+            const rebased = [];
+            const failed = [];
+
+            for (const pullRequest of stagedPullRequests) {
+              const pullRequestBranch = `staging-pr-${pullRequest.number}`;
+
+              try {
+                core.info(`Rebasing PR #${pullRequest.number} onto ${stagingBranch}.`);
+                await exec.exec("git", [
+                  "fetch",
+                  "origin",
+                  `pull/${pullRequest.number}/head:${pullRequestBranch}`,
+                ]);
+                await exec.exec("git", ["checkout", pullRequestBranch]);
+                await exec.exec("git", ["rebase", "--rebase-merges", stagingBranch]);
+                await exec.exec("git", ["checkout", stagingBranch]);
+                await exec.exec("git", ["merge", "--ff-only", pullRequestBranch]);
+                rebased.push(pullRequest.number);
+              } catch (error) {
+                await exec.exec("git", ["rebase", "--abort"], { ignoreReturnCode: true });
+                await exec.exec("git", ["checkout", stagingBranch], { ignoreReturnCode: true });
+
+                const message = error instanceof Error ? error.message : String(error);
+                failed.push({ number: pullRequest.number, message });
+                core.error(`PR #${pullRequest.number} could not be rebased: ${message}`);
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: pullRequest.number,
+                  body: `The staging rebuild could not rebase this PR onto \`${stagingBranch}\`. Resolve the conflict, then update the PR to retry.`,
+                });
+              }
+            }
+
+            await exec.exec("git", [
+              "push",
+              "origin",
+              `${stagingBranch}:${stagingBranch}`,
+              "--force",
+            ]);
+
+            await core.summary
+              .addHeading("Staging rebuild")
+              .addRaw(`Base branch: \`${baseBranch}\`\n\n`)
+              .addRaw(`Staging branch: \`${stagingBranch}\`\n\n`)
+              .addRaw(`Rebased PRs: ${rebased.length ? rebased.map((number) => `#${number}`).join(", ") : "none"}\n\n`)
+              .addRaw(`Failed PRs: ${failed.length ? failed.map((pullRequest) => `#${pullRequest.number}`).join(", ") : "none"}\n`)
+              .write();
+
+            if (failed.length > 0) {
+              core.setFailed(`Staging rebuild failed for PRs: ${failed.map((pullRequest) => `#${pullRequest.number}`).join(", ")}`);
+            }
