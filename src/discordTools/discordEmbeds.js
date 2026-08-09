@@ -25,6 +25,12 @@ const Constants = require('../util/constants.js');
 const DiscordTools = require('./discordTools.js');
 const InstanceUtils = require('../util/instanceUtils.js');
 const Timer = require('../util/timer');
+const Config = require('../../config');
+
+function isValidUrl(url) {
+    if (url.startsWith('https') || url.startsWith('http')) return true;
+    return false;
+}
 
 module.exports = {
     getEmbed: function (options = {}) {
@@ -75,7 +81,7 @@ module.exports = {
         }
 
         let description = '';
-        if (server.battlemetricsId !== null) {
+        if (Config.battlemetrics.token !== '' && server.battlemetricsId !== null) {
             const bmId = server.battlemetricsId;
             const bmIdLink = `[${bmId}](${Constants.BATTLEMETRICS_SERVER_URL}${bmId})`;
             description += `__**${Client.client.intlGet(guildId, 'battlemetricsId')}:**__ ${bmIdLink}\n`;
@@ -597,7 +603,7 @@ module.exports = {
             footer: { text: body.name },
             title: data.title,
             description: data.message,
-            thumbnail: body.img !== '' ? body.img : 'attachment://rocket.png'
+            thumbnail: (body.img !== '' && isValidUrl(body.img)) ? body.img : 'attachment://rocket.png'
         });
     },
 
